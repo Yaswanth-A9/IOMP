@@ -1,62 +1,64 @@
-from flask import Flask, render_template, request
-import os
-import cv2
+from flask import Flask, render_template, request, redirect, url_for
 from ultralytics import YOLO
-import torch
+import cv2
+import os
+import uuid
 
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "static/uploads"
-RESULT_FOLDER = "static/results"
-
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(RESULT_FOLDER, exist_ok=True)
 
-# ✅ FORCE CPU (Important for Render Free Plan)
-device = "cpu"
+# ================= LOAD MODEL ONLY ONCE =================
+model = YOLO("yolov8n.pt")   # small model (best for free tier)
 
-# ✅ Load YOLOv8 model
-model = YOLO("yolov8n.pt")
-model.to(device)
+# ========================================================
 
 @app.route("/")
 def home():
     return render_template("index.html")
 
-@app.route("/predict", methods=["POST"])
-def predict():
+
+@app.route("/upload", methods=["POST"])
+def upload():
+
     if "file" not in request.files:
-        return "No file uploaded"
+        return redirect(url_for("home"))
 
     file = request.files["file"]
-    if file.filename == "":
-        return "No selected file"
 
-    # Save uploaded image
-    filepath = os.path.join(UPLOAD_FOLDER, file.filename)
+    if file.filename == "":
+        return redirect(url_for("home"))
+
+    # Save uploaded file
+    unique_name = str(uuid.uuid4()) + ".jpg"
+    filepath = os.path.join(UPLOAD_FOLDER, unique_name)
     file.save(filepath)
 
-    # Run YOLO detection
-    results = model(filepath)
+    # Read image
+    frame = cv2.imread(filepath)
 
-    result = results[0]
-    boxes = result.boxes
+    # Run YOLO on CPU
+    results = model(frame, conf=0.25, device="cpu")
 
-    # Count objects
-    object_count = len(boxes)
+    # Get detections
+    boxes = results[0].boxes
+    count = len(boxes)
 
-    # Draw results
-    annotated_frame = result.plot()
+    # Draw detections
+    annotated_frame = results[0].plot()
 
     # Save result image
-    result_path = os.path.join(RESULT_FOLDER, file.filename)
-    cv2.imwrite(result_path, annotated_frame)
+    output_path = os.path.join(UPLOAD_FOLDER, "result_" + unique_name)
+    cv2.imwrite(output_path, annotated_frame)
 
     return render_template(
         "index.html",
-        result_image=result_path,
-        count=object_count
+        input_image=filepath,
+        output_image=output_path,
+        count=count
     )
 
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(debug=True)
