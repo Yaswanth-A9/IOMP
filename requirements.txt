@@ -2,7 +2,8 @@ flask
 gunicorn
 ultralytics
 opencv-python-headless
-torch
-torchvision
 numpy
 pillow
+torch==2.2.2+cpu
+torchvision==0.17.2+cpu
+--extra-index-url https://download.pytorch.org/whl/cpu
