@@ -13,10 +13,10 @@ STATIC_FOLDER = "static"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(STATIC_FOLDER, exist_ok=True)
 
+# Load YOLOv8 nano model
 model = YOLO("yolov8n.pt")
 
 video_path = None
-
 
 # ================= HOME =================
 @app.route("/")
@@ -29,7 +29,6 @@ def index():
         total=session.pop("total", None)
     )
 
-
 # ================= UPLOAD =================
 @app.route("/upload", methods=["POST"])
 def upload():
@@ -41,7 +40,6 @@ def upload():
         os.remove(result_img)
 
     file = request.files["file"]
-
     if file.filename == "":
         return redirect(url_for("index"))
 
@@ -50,12 +48,10 @@ def upload():
 
     # ================= IMAGE =================
     if file.filename.lower().endswith((".jpg", ".jpeg", ".png")):
-
         frame = cv2.imread(file_path)
         results = model(frame, conf=0.15)
 
         boxes = results[0].boxes
-
         if boxes is not None and len(boxes) > 0:
             class_ids = boxes.cls.tolist()
             names = model.names
@@ -73,15 +69,15 @@ def upload():
         session["video_result"] = False
 
         annotated_frame = results[0].plot()
-
-        # Overlay total
-        cv2.putText(annotated_frame,
-                    f"Total Objects: {total_objects}",
-                    (20, 40),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 0, 255),
-                    2)
+        cv2.putText(
+            annotated_frame,
+            f"Total Objects: {total_objects}",
+            (20, 40),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (0, 0, 255),
+            2
+        )
 
         output_image = os.path.join(STATIC_FOLDER, "result.jpg")
         cv2.imwrite(output_image, annotated_frame)
@@ -97,11 +93,9 @@ def upload():
 
     return redirect(url_for("index"))
 
-
 # ================= VIDEO STREAM =================
 def generate():
     global video_path
-
     cap = cv2.VideoCapture(video_path)
 
     while cap.isOpened():
@@ -123,42 +117,43 @@ def generate():
             total_objects = 0
 
         annotated_frame = results[0].plot()
-
-        # Overlay total
-        cv2.putText(annotated_frame,
-                    f"Total Objects: {total_objects}",
-                    (20, 40),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 0, 255),
-                    2)
+        cv2.putText(
+            annotated_frame,
+            f"Total Objects: {total_objects}",
+            (20, 40),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (0, 0, 255),
+            2
+        )
 
         # Overlay class-wise counts
         y_offset = 80
         for cls, count in count_dict.items():
-            cv2.putText(annotated_frame,
-                        f"{cls}: {count}",
-                        (20, y_offset),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.8,
-                        (255, 0, 0),
-                        2)
+            cv2.putText(
+                annotated_frame,
+                f"{cls}: {count}",
+                (20, y_offset),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (255, 0, 0),
+                2
+            )
             y_offset += 30
 
         _, buffer = cv2.imencode('.jpg', annotated_frame)
         frame_bytes = buffer.tobytes()
-
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
 
     cap.release()
 
-
 @app.route("/video_feed")
 def video_feed():
-    return Response(generate(),
-                    mimetype='multipart/x-mixed-replace; boundary=frame')
+    return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
-
+# ================= RUN =================
 if __name__ == "__main__":
-    app.run(debug=True)
+    import os
+    port = int(os.environ.get("PORT", 5000))  # Use Render's port
+    app.run(host="0.0.0.0", port=port, debug=False)  # Expose externally for Render
